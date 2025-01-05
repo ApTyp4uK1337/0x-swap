@@ -1,0 +1,28 @@
+{
+  "name": "trader",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "dependencies": {
+    "@0x/swap-ts-sdk": "2.1.1",
+    "@metamask/eth-sig-util": "^8.1.2",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "eth-sig-util": "^3.0.1",
+    "ethereumjs-util": "^7.1.5",
+    "ethers": "^6.13.4",
+    "solidity-cli": "^0.1.0",
+    "viem": "^2.22.2",
+    "web3": "^4.16.0"
+  },
+  "devDependencies": {
+    "eip712-codegen": "^6.0.8"
+  }
+}
