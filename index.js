@@ -3,45 +3,94 @@ import Web3 from 'web3';
 import axios from 'axios';
 import ethSigUtil from "@metamask/eth-sig-util";
 
-const web3 = new Web3(new Web3.providers.HttpProvider("https://arbitrum-mainnet.infura.io/v3/789575b58c67497aa56b8dad0b2b01fd"))
+const ZEROX_API_KEY = '661ea407-1a57-4484-92a4-36e9c948b09d';
+const ETHERSCAN_API_KEY = 'EFFCKR22SST6MUQMI1SPXDEKN6Y6G3H82G';
+const INFURA_API_KEY = '789575b58c67497aa56b8dad0b2b01fd';
+
+const web3 = new Web3(new Web3.providers.HttpProvider(`https://arbitrum-mainnet.infura.io/v3/${INFURA_API_KEY}`))
 
 const privateKey = '0x01a8ab0f56985b955a6fc277373258a1a0c5874480a9cf955e51afeea6f211b5';
-const fromAddress = '0xafee6822628b083a2d16c0cdd7ad845d7a4b82f5';
-const amountIn = web3.utils.toWei('268817505', 'ether');
 
-const zeroXAPI = 'https://api.0x.org/swap/permit2/quote';
+const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+const wallet = web3.eth.accounts.wallet.add(account);
 
-const wallet = web3.eth.accounts.privateKeyToAccount(privateKey);
-web3.eth.accounts.wallet.add(wallet);
+const chainId = '42161';
+const sellToken = '0x6ceb7abc1b001b2f874185ac4932e7aee83970ef';
+const buyToken = '0xd44257dde89ca53f1471582f718632e690e46dc2';
+const amountIn = web3.utils.toWei('0.00004859', 'ether');
 
-async function executeSwap() {
+async function getAbi(tokenAddress) {
+  if (fs.existsSync(`./abi/${tokenAddress}.json`)) {
+    const abi = JSON.parse(fs.readFileSync(`./abi/${tokenAddress}.json`, 'utf8'));
+
+    return abi;
+  }
+
   try {
-    const response = await axios.get(zeroXAPI, {
+    const response = await axios.get('https://api.etherscan.io/v2/api', {
       params: {
-        chainId: '42161',
-        sellToken: '0xd44257dde89ca53f1471582f718632e690e46dc2',
-        buyToken: '0x6ceb7abc1b001b2f874185ac4932e7aee83970ef',
-        sellAmount: amountIn,
-        taker: fromAddress,
-      },
-      headers: {
-        '0x-api-key': '661ea407-1a57-4484-92a4-36e9c948b09d',
-        '0x-version': 'v2'
+        chainid: chainId,
+        module: 'contract',
+        action: 'getabi',
+        address: tokenAddress,
+        apikey: ETHERSCAN_API_KEY
       }
     });
 
-    if (!response.data || !response.data.transaction) {
-      throw new Error('Invalid transaction data from API');
+    if (response.data && response.data.status === '1') {
+      const abi = JSON.parse(response.data.result);
+
+      fs.mkdirSync('./abi', { recursive: true });
+      fs.writeFileSync(`./abi/${tokenAddress}.json`, JSON.stringify(abi, null, 2), 'utf8');
+
+      return abi;
+    } else {
+      throw new Error(`Ошибка API: ${response.data.message || 'Неизвестная ошибка'}`);
+    }
+  } catch (error) {
+    console.error(`Не удалось загрузить ABI: ${error.message}`);
+
+    throw error;
+  }
+}
+
+async function getQuote(chainId, sellToken, buyToken, amountIn, walletAddress) {
+  try {
+    const { data } = await axios.get('https://api.0x.org/swap/permit2/quote', {
+      params: {
+        chainId: chainId,
+        sellToken,
+        buyToken,
+        sellAmount: amountIn,
+        taker: walletAddress,
+      },
+      headers: {
+        '0x-api-key': ZEROX_API_KEY,
+        '0x-version': 'v2',
+      },
+    });
+
+    if (!data || !data.transaction) {
+      throw new Error('Invalid transaction data from ZeroX API');
     }
 
-    const quote = response.data;
+    return data;
+  } catch (error) {
+    console.error('Ошибка получения котировки:', error.message);
 
-    const erc20abi = JSON.parse(fs.readFileSync('./abi/0xd44257dde89ca53f1471582f718632e690e46dc2.json', 'utf8'));
+    throw error;
+  }
+}
 
-    const ERC20TokenContract = new web3.eth.Contract(erc20abi, '0xd44257dde89ca53f1471582f718632e690e46dc2');
+async function executeSwap() {
+  try {
+    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, wallet[0].address);
 
     if (quote.issues.allowance !== null) {
-      const approve = await ERC20TokenContract.methods.approve(quote.issues.allowance.spender, amountIn).send({ from: fromAddress });
+      const sellTokenABI = await getAbi(sellToken);
+      const sellTokenContract = new web3.eth.Contract(sellTokenABI, sellToken);
+
+      await sellTokenContract.methods.approve(quote.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: wallet[0].address });
     }
 
     const signature = ethSigUtil.signTypedData({ privateKey: privateKey.slice(2), data: quote.permit2.eip712, version: 'V4' });
@@ -50,7 +99,7 @@ async function executeSwap() {
     const txData = quote.transaction.data + signatureLengthInHex.slice(2) + signature.slice(2);
 
     const tx = {
-      from: fromAddress,
+      from: wallet[0].address,
       to: quote.transaction.to,
       data: txData,
       value: '0',
@@ -70,6 +119,15 @@ async function executeSwap() {
       console.error('Transaction failed:', error);
     } else {
       console.log('Transaction successful:', receipt);
+
+      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, wallet[0].address);
+
+      if (quote2.issues.allowance !== null) {
+        const buyTokenABI = await getAbi(buyToken);
+        const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
+
+        await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: wallet[0].address });
+      }
     }
   } catch (error) {
     console.error('Error executing swap:', error);
