@@ -1,9 +1,14 @@
 import express from 'express';
-import authRoutes from './auth.js';
+import ping from './ping.js';
+import walletAuthRoutes from './walletAuth.js';
+import getTokenDetails from './getTokenDetails.js'
+import getTokenBalance from './getTokenBalance.js'
 
 const router = express.Router();
 
-// Подключение маршрутов
-router.use('/auth', authRoutes);
+router.use('/ping', ping);
+router.use('/walletAuth', walletAuthRoutes);
+router.use('/getTokenDetails', getTokenDetails);
+router.use('/getTokenBalance', getTokenBalance);
 
 export default router;
