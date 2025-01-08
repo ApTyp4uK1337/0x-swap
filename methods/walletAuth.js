@@ -1,11 +1,11 @@
 import express from 'express';
 import Web3 from 'web3';
-import { DEVELOPER_API_KEY, INFURA_API_KEY } from '../config.js';
+import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
 import { getTimestamp } from '../utils.js';
 
 const router = express.Router();
 
-const web3 = new Web3(new Web3.providers.HttpProvider(`https://arbitrum-mainnet.infura.io/v3/${INFURA_API_KEY}`));
+const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER));
 
 async function walletAuth(privateKey) {
   try {

@@ -41,15 +41,17 @@ export async function getAbi(chainId, tokenAddress) {
   }
 }
 
-export async function getQuote(chainId, sellToken, buyToken, amountIn, walletAddress) {
+export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, slippageBps = 100, sellEntireBalance = null) {
   try {
     const { data } = await axios.get('https://api.0x.org/swap/permit2/quote', {
       params: {
-        chainId: chainId,
+        chainId,
         sellToken,
         buyToken,
-        sellAmount: amountIn,
-        taker: walletAddress,
+        sellAmount,
+        taker,
+        slippageBps,
+        sellEntireBalance
       },
       headers: {
         '0x-api-key': ZEROX_API_KEY,
@@ -58,8 +60,10 @@ export async function getQuote(chainId, sellToken, buyToken, amountIn, walletAdd
     });
 
     if (!data || !data.transaction) {
-      throw new Error('Invalid transaction data from ZeroX API');
+      throw new Error('Invalid transaction data from 0x API');
     }
+
+    console.log(data);
 
     return data;
   } catch (error) {
