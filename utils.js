@@ -63,12 +63,26 @@ export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, 
       throw new Error('Invalid transaction data from 0x API');
     }
 
-    console.log(data);
-
     return data;
   } catch (error) {
     console.error('Ошибка получения котировки:', error.message);
 
     throw error;
   }
+}
+
+export async function fetchTokenDetails(contract, address) {
+  return Promise.all([
+    contract.methods.name().call(),
+    contract.methods.symbol().call(),
+    contract.methods.decimals().call(),
+    contract.methods.balanceOf(address).call(),
+  ]);
+}
+
+export async function getTokenDetails(chainId, tokenAddress, walletAddress) {
+  const tokenAbi = await getAbi(chainId, tokenAddress);
+  const tokenContract = new web3.eth.Contract(tokenAbi, tokenAddress);
+  const [name, symbol, decimals, balance] = await fetchTokenDetails(tokenContract, walletAddress);
+  return { name, symbol, decimals: Number(decimals), balance: Number(balance) };
 }

@@ -5,23 +5,30 @@ import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
 import { getAbi, getQuote, getTimestamp } from '../utils.js';
 
 const router = express.Router();
-
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
 
-async function swapToken(privateKey, chainId, sellToken, buyToken, amount, slippage, sellEntireBalance) {
+function addAccountToWallet(privateKey) {
+  const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+  web3.eth.accounts.wallet.add(account);
+
+  return account;
+}
+
+async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage, sellEntireBalance) {
+  let account;
+
   try {
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    const wallet = web3.eth.accounts.wallet.add(account);
+    account = addAccountToWallet(privateKey);
 
-    const amountIn = web3.utils.toWei(amount.toString(), 'ether');
+    const amountIn = web3.utils.toWei(amount.toString(), 'ether').toString();
 
-    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, wallet[0].address, slippage, sellEntireBalance);
+    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage, sellEntireBalance);
 
     const sellTokenABI = await getAbi(chainId, sellToken);
     const sellTokenContract = new web3.eth.Contract(sellTokenABI, sellToken);
 
     if (quote.issues.allowance !== null) {
-      await sellTokenContract.methods.approve(quote.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: wallet[0].address });
+      await sellTokenContract.methods.approve(quote.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
     }
 
     const signature = ethSigUtil.signTypedData({ privateKey: privateKey.slice(2), data: quote.permit2.eip712, version: 'V4' });
@@ -30,11 +37,11 @@ async function swapToken(privateKey, chainId, sellToken, buyToken, amount, slipp
     const txData = quote.transaction.data + signatureLengthInHex.slice(2) + signature.slice(2);
 
     const tx = {
-      from: wallet[0].address,
+      from: account.address,
       to: quote.transaction.to,
       data: txData,
       value: '0',
-      gas: Math.floor(Number(quote.transaction.gas) * 1.2).toString(),
+      gas: Math.floor(BigInt(quote.transaction.gas) * 1.2).toString(),
       gasPrice: quote.transaction.gasPrice,
     };
 
@@ -49,13 +56,13 @@ async function swapToken(privateKey, chainId, sellToken, buyToken, amount, slipp
     } else {
       console.log('Transaction successful:', receipt);
 
-      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, wallet[0].address, slippage);
+      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
 
       const buyTokenABI = await getAbi(chainId, buyToken);
       const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
 
       if (quote2.issues.allowance !== null) {
-        await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: wallet[0].address });
+        await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
       }
 
       const transferEventSignature = web3.utils.sha3('Transfer(address,address,uint256)');
@@ -81,20 +88,20 @@ async function swapToken(privateKey, chainId, sellToken, buyToken, amount, slipp
         console.log('Transfer event not found');
       }
 
-      const defaultBalance = await web3.eth.getBalance(wallet[0].address);
+      const defaultBalance = await web3.eth.getBalance(account.address);
 
       const [sellTokenResult, buyTokenResult] = await Promise.all([
         Promise.all([
           sellTokenContract.methods.name().call(),
           sellTokenContract.methods.symbol().call(),
           sellTokenContract.methods.decimals().call(),
-          sellTokenContract.methods.balanceOf(wallet[0].address).call(),
+          sellTokenContract.methods.balanceOf(account.address).call(),
         ]),
         Promise.all([
           buyTokenContract.methods.name().call(),
           buyTokenContract.methods.symbol().call(),
           buyTokenContract.methods.decimals().call(),
-          buyTokenContract.methods.balanceOf(wallet[0].address).call(),
+          buyTokenContract.methods.balanceOf(account.address).call(),
         ]),
       ]);
 
@@ -104,30 +111,30 @@ async function swapToken(privateKey, chainId, sellToken, buyToken, amount, slipp
           tx_hash: receipt.transactionHash,
           sell_token: sellToken,
           buy_token: buyToken,
-          sell_amount: Number(amount),
-          buy_amount: Number(buyAmount) ?? 0,
-          gas_used: Number(receipt.gasUsed),
+          sell_amount: amount.toString(),
+          buy_amount: buyAmount.toString() ?? 0,
+          gas_used: receipt.gasUsed.toString(),
           tokens: {
             0: {
               chain_id: Number(chainId),
               symbol: "ETH",
               name: "Ethereum",
               decimals: 18,
-              balance: Number(defaultBalance)
+              balance: defaultBalance.toString()
             },
             [sellToken]: {
               chain_id: Number(chainId),
               symbol: sellTokenResult[1],
               name: sellTokenResult[0],
               decimals: Number(sellTokenResult[2]),
-              balance: Number(sellTokenResult[3])
+              balance: sellTokenResult[3].toString()
             },
             [buyToken]: {
               chain_id: Number(chainId),
               symbol: buyTokenResult[1],
               name: buyTokenResult[0],
               decimals: Number(buyTokenResult[2]),
-              balance: Number(buyTokenResult[3])
+              balance: buyTokenResult[3].toString()
             }
           }
         },
@@ -136,27 +143,45 @@ async function swapToken(privateKey, chainId, sellToken, buyToken, amount, slipp
     }
   } catch (error) {
     throw new Error(error.message);
+  } finally {
+    if (account) {
+      web3.eth.accounts.wallet.remove(account.address);
+    }
   }
 }
 
 router.post('/', async (req, res) => {
-  const apiKey = req.headers['developer-api-key'];
-
-  if (!apiKey || apiKey !== DEVELOPER_API_KEY) {
-    return res.status(403).json({ status: false, error: 'Forbidden: Invalid or missing API key', timestamp: new Date() });
-  }
-
-  const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100, sell_entire_balance = null } = req.body;
-
-  if (!private_key || !chain_id || !sell_token || !buy_token || !amount || !slippage) {
-    return res.status(400).json({ status: false, error: 'Missing required parameters', params: req.body, timestamp: new Date() });
-  }
-
   try {
-    const response = await swapToken(private_key, chain_id, sell_token, buy_token, amount, slippage, sell_entire_balance);
+    const apiKey = req.headers['developer-api-key'];
+
+    if (apiKey !== DEVELOPER_API_KEY) {
+      return res.status(403).json({
+        status: false,
+        error: 'Forbidden: Invalid or missing API key',
+        timestamp: getTimestamp(),
+      });
+    }
+
+    const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100, sell_entire_balance = null } = req.body;
+
+    if (!private_key) {
+      return res.status(400).json({
+        status: false,
+        error: 'Missing required parameters',
+        params: req.body,
+        timestamp: getTimestamp(),
+      });
+    }
+
+    const response = await swapTokens(private_key, chain_id, sell_token, buy_token, amount, slippage, sell_entire_balance);
     return res.status(200).json(response);
   } catch (error) {
-    return res.status(500).json({ status: false, error: 'swapToken failed', details: error.message, timestamp: new Date() });
+    return res.status(500).json({
+      status: false,
+      error: 'swapTokens failed',
+      details: error.message,
+      timestamp: getTimestamp(),
+    });
   }
 });
 
