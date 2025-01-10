@@ -5,7 +5,7 @@ import { getTimestamp } from '../utils.js';
 
 const router = express.Router();
 
-const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER));
+const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
 
 function addAccountToWallet(privateKey) {
   const account = web3.eth.accounts.privateKeyToAccount(privateKey);

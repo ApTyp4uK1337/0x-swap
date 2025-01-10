@@ -1,7 +1,7 @@
 import express from 'express';
 import Web3 from 'web3';
 import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getAbi, getQuote, getTimestamp, convertBigIntToString } from '../utils.js';
+import { getAbi, getTimestamp } from '../utils.js';
 
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
@@ -13,26 +13,14 @@ function addAccountToWallet(privateKey) {
   return account;
 }
 
-async function approveToken(privateKey, chainId, sellToken, buyToken, sellAmount) {
+async function initToken(privateKey, chainId, token) {
   let account;
 
   try {
     account = addAccountToWallet(privateKey);
 
-    const amount = web3.utils.toWei(sellAmount, 'ether').toString();
-
-    const quote = await getQuote(chainId, sellToken, buyToken, amount, account.address);
-    const abi = await getAbi(chainId, sellToken);
-    const contract = new web3.eth.Contract(abi, sellToken);
-
-    if (quote.issues.allowance) {
-      await contract.methods
-        .approve(
-          quote.issues.allowance.spender,
-          '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
-        )
-        .send({ from: account.address });
-    }
+    const abi = await getAbi(chainId, token);
+    const contract = new web3.eth.Contract(abi, token);
 
     const [name, symbol, decimals] = await Promise.all([
       contract.methods.name().call(),
@@ -44,10 +32,10 @@ async function approveToken(privateKey, chainId, sellToken, buyToken, sellAmount
       status: true,
       response: {
         chain_id: Number(chainId),
-        address: sellToken,
-        name: name,
+        address: token,
         symbol: symbol,
-        decimals: decimals
+        name: name,
+        decimals: Number(decimals)
       },
       timestamp: getTimestamp(),
     };
@@ -69,21 +57,21 @@ router.post('/', async (req, res) => {
       .json({ status: false, error: 'Forbidden: Invalid or missing API key', timestamp: new Date() });
   }
 
-  const { private_key, chain_id = 42161, sell_token, buy_token, amount = 10000 } = req.body;
+  const { private_key, chain_id = 42161, token } = req.body;
 
-  if (!private_key || !chain_id || !sell_token || !buy_token || !amount) {
+  if (!private_key || !chain_id || !token) {
     return res
       .status(400)
       .json({ status: false, error: 'Missing required parameters', params: req.body, timestamp: new Date() });
   }
 
   try {
-    const response = await approveToken(private_key, chain_id, sell_token, buy_token, amount);
-    return res.status(200).json(convertBigIntToString(response));
+    const response = await initToken(private_key, chain_id, token);
+    return res.status(200).json(response);
   } catch (error) {
     return res
       .status(500)
-      .json({ status: false, error: 'approveToken failed', details: error.message, timestamp: new Date() });
+      .json({ status: false, error: 'initToken failed', details: error.message, timestamp: new Date() });
   }
 });
 

@@ -2,7 +2,7 @@ import express from 'express';
 import Web3 from 'web3';
 import ethSigUtil from "@metamask/eth-sig-util";
 import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getAbi, getQuote, getTimestamp } from '../utils.js';
+import { getAbi, getQuote, getTimestamp, convertBigIntToString } from '../utils.js';
 
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
@@ -14,15 +14,15 @@ function addAccountToWallet(privateKey) {
   return account;
 }
 
-async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage, sellEntireBalance) {
+async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage) {
   let account;
 
   try {
     account = addAccountToWallet(privateKey);
 
-    const amountIn = web3.utils.toWei(amount.toString(), 'ether').toString();
+    const amountIn = web3.utils.toWei(amount, 'ether').toString();
 
-    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage, sellEntireBalance);
+    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage);
 
     const sellTokenABI = await getAbi(chainId, sellToken);
     const sellTokenContract = new web3.eth.Contract(sellTokenABI, sellToken);
@@ -41,38 +41,34 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       to: quote.transaction.to,
       data: txData,
       value: '0',
-      gas: Math.floor(BigInt(quote.transaction.gas) * 1.2).toString(),
-      gasPrice: quote.transaction.gasPrice,
+      gas: quote.transaction.gas.toString(),
+      gasPrice: quote.transaction.gasPrice.toString(),
     };
 
     const signedTx = await web3.eth.accounts.signTransaction(tx, privateKey);
     const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
 
-    if (!receipt.status) {
-      const error = await web3.eth.getTransactionError(signedTx.hash);
+    if (receipt.status) {
+      try {
+        const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
 
+        const buyTokenABI = await getAbi(chainId, buyToken);
+        const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
 
-      console.error('Transaction failed:', error);
-    } else {
-      console.log('Transaction successful:', receipt);
-
-      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
-
-      const buyTokenABI = await getAbi(chainId, buyToken);
-      const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
-
-      if (quote2.issues.allowance !== null) {
-        await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
+        if (quote2.issues.allowance !== null) {
+          await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
+        }
+      } catch (error) {
+        console.error('Error during secondary quote retrieval or processing:', error.message);
       }
+
+      let buyAmount = 0
 
       const transferEventSignature = web3.utils.sha3('Transfer(address,address,uint256)');
       const transferEvents = receipt.logs.filter(log => log.topics[0] === transferEventSignature);
 
-      let buyAmount = 0;
-
       if (transferEvents.length > 0) {
         const lastTransferEvent = transferEvents.pop();
-
         const decodedEvent = web3.eth.abi.decodeLog(
           [
             { type: 'address', name: 'from', indexed: true },
@@ -83,66 +79,31 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
           lastTransferEvent.topics.slice(1)
         );
 
-        buyAmount = decodedEvent.value;
-      } else {
-        console.log('Transfer event not found');
+        buyAmount = decodedEvent.value.toString();
       }
 
-      const defaultBalance = await web3.eth.getBalance(account.address);
-
-      const [sellTokenResult, buyTokenResult] = await Promise.all([
-        Promise.all([
-          sellTokenContract.methods.name().call(),
-          sellTokenContract.methods.symbol().call(),
-          sellTokenContract.methods.decimals().call(),
-          sellTokenContract.methods.balanceOf(account.address).call(),
-        ]),
-        Promise.all([
-          buyTokenContract.methods.name().call(),
-          buyTokenContract.methods.symbol().call(),
-          buyTokenContract.methods.decimals().call(),
-          buyTokenContract.methods.balanceOf(account.address).call(),
-        ]),
-      ]);
-
       return {
-        status: true,
+        status: receipt.status,
         response: {
           tx_hash: receipt.transactionHash,
           sell_token: sellToken,
           buy_token: buyToken,
           sell_amount: amount.toString(),
-          buy_amount: buyAmount.toString() ?? 0,
+          buy_amount: buyAmount.toString() ?? '0',
           gas_used: receipt.gasUsed.toString(),
-          tokens: {
-            0: {
-              chain_id: Number(chainId),
-              symbol: "ETH",
-              name: "Ethereum",
-              decimals: 18,
-              balance: defaultBalance.toString()
-            },
-            [sellToken]: {
-              chain_id: Number(chainId),
-              symbol: sellTokenResult[1],
-              name: sellTokenResult[0],
-              decimals: Number(sellTokenResult[2]),
-              balance: sellTokenResult[3].toString()
-            },
-            [buyToken]: {
-              chain_id: Number(chainId),
-              symbol: buyTokenResult[1],
-              name: buyTokenResult[0],
-              decimals: Number(buyTokenResult[2]),
-              balance: buyTokenResult[3].toString()
-            }
-          }
         },
         timestamp: getTimestamp()
-      }
+      };
     }
   } catch (error) {
-    throw new Error(error.message);
+    console.error('Transaction failed:', error.message);
+    return {
+      status: false,
+      response: {
+        error: error.message,
+      },
+      timestamp: getTimestamp()
+    };
   } finally {
     if (account) {
       web3.eth.accounts.wallet.remove(account.address);
@@ -162,7 +123,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100, sell_entire_balance = null } = req.body;
+    const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100 } = req.body;
 
     if (!private_key) {
       return res.status(400).json({
@@ -173,8 +134,8 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const response = await swapTokens(private_key, chain_id, sell_token, buy_token, amount, slippage, sell_entire_balance);
-    return res.status(200).json(response);
+    const response = await swapTokens(private_key, chain_id, sell_token, buy_token, amount, slippage);
+    return res.status(200).json(convertBigIntToString(response));
   } catch (error) {
     return res.status(500).json({
       status: false,

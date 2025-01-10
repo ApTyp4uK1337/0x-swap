@@ -41,7 +41,7 @@ export async function getAbi(chainId, tokenAddress) {
   }
 }
 
-export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, slippageBps = 100, sellEntireBalance = null) {
+export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, slippageBps = 100) {
   try {
     const { data } = await axios.get('https://api.0x.org/swap/permit2/quote', {
       params: {
@@ -50,8 +50,7 @@ export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, 
         buyToken,
         sellAmount,
         taker,
-        slippageBps,
-        sellEntireBalance
+        slippageBps
       },
       headers: {
         '0x-api-key': ZEROX_API_KEY,
@@ -71,18 +70,10 @@ export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, 
   }
 }
 
-export async function fetchTokenDetails(contract, address) {
-  return Promise.all([
-    contract.methods.name().call(),
-    contract.methods.symbol().call(),
-    contract.methods.decimals().call(),
-    contract.methods.balanceOf(address).call(),
-  ]);
-}
-
-export async function getTokenDetails(chainId, tokenAddress, walletAddress) {
-  const tokenAbi = await getAbi(chainId, tokenAddress);
-  const tokenContract = new web3.eth.Contract(tokenAbi, tokenAddress);
-  const [name, symbol, decimals, balance] = await fetchTokenDetails(tokenContract, walletAddress);
-  return { name, symbol, decimals: Number(decimals), balance: Number(balance) };
+export function convertBigIntToString(obj) {
+  return JSON.parse(
+    JSON.stringify(obj, (key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    )
+  );
 }
