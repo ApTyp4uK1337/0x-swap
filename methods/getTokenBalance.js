@@ -1,7 +1,7 @@
 import express from 'express';
 import Web3 from 'web3';
 import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getAbi, getTimestamp, convertBigIntToString } from '../utils.js';
+import { getAbi, convertBigIntToString } from '../utils.js';
 
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
@@ -28,7 +28,7 @@ async function getTokenBalance(privateKey, chainId, tokenAddress = null) {
           balance: ethBalance.toString()
         },
       },
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     };
 
     if (tokenAddress) {
@@ -58,7 +58,7 @@ router.post('/', async (req, res) => {
       return res.status(403).json({
         status: false,
         error: 'Forbidden: Invalid or missing API key',
-        timestamp: getTimestamp(),
+        timestamp: new Date(),
       });
     }
 
@@ -69,7 +69,7 @@ router.post('/', async (req, res) => {
         status: false,
         error: 'Missing required parameters',
         params: req.body,
-        timestamp: getTimestamp(),
+        timestamp: new Date(),
       });
     }
 
@@ -80,7 +80,7 @@ router.post('/', async (req, res) => {
       status: false,
       error: 'getTokenBalance failed',
       details: error.message,
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     });
   }
 });

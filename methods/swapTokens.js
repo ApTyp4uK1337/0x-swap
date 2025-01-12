@@ -2,7 +2,7 @@ import express from 'express';
 import Web3 from 'web3';
 import ethSigUtil from "@metamask/eth-sig-util";
 import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getAbi, getQuote, getTimestamp, convertBigIntToString } from '../utils.js';
+import { getAbi, getQuote, convertBigIntToString } from '../utils.js';
 
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
@@ -20,7 +20,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
   try {
     account = addAccountToWallet(privateKey);
 
-    const amountIn = web3.utils.toWei(amount, 'ether').toString();
+    const amountIn = web3.utils.toWei(amount.toString(), 'ether').toString();
 
     const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage);
 
@@ -92,7 +92,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
           buy_amount: buyAmount.toString() ?? '0',
           gas_used: receipt.gasUsed.toString(),
         },
-        timestamp: getTimestamp()
+        timestamp: new Date()
       };
     }
   } catch (error) {
@@ -102,7 +102,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       response: {
         error: error.message,
       },
-      timestamp: getTimestamp()
+      timestamp: new Date()
     };
   } finally {
     if (account) {
@@ -119,7 +119,7 @@ router.post('/', async (req, res) => {
       return res.status(403).json({
         status: false,
         error: 'Forbidden: Invalid or missing API key',
-        timestamp: getTimestamp(),
+        timestamp: new Date(),
       });
     }
 
@@ -130,7 +130,7 @@ router.post('/', async (req, res) => {
         status: false,
         error: 'Missing required parameters',
         params: req.body,
-        timestamp: getTimestamp(),
+        timestamp: new Date(),
       });
     }
 
@@ -141,7 +141,7 @@ router.post('/', async (req, res) => {
       status: false,
       error: 'swapTokens failed',
       details: error.message,
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     });
   }
 });

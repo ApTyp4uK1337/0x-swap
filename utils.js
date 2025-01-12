@@ -2,11 +2,13 @@ import fs from 'fs';
 import axios from 'axios';
 import { ETHERSCAN_API_KEY, ZEROX_API_KEY } from './config.js';
 
-export function getTimestamp() {
-  return new Date();
-}
-
 export async function getAbi(chainId, tokenAddress) {
+  if (fs.existsSync(`./abi/erc20abi.json`)) {
+    const abi = JSON.parse(fs.readFileSync(`./abi/erc20abi.json`, 'utf8'));
+
+    return abi;
+  }
+
   if (fs.existsSync(`./abi/${tokenAddress}.json`)) {
     const abi = JSON.parse(fs.readFileSync(`./abi/${tokenAddress}.json`, 'utf8'));
 

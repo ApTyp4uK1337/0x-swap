@@ -1,7 +1,7 @@
 import express from 'express';
 import Web3 from 'web3';
 import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getAbi, getTimestamp } from '../utils.js';
+import { getAbi } from '../utils.js';
 
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
@@ -37,7 +37,7 @@ async function initToken(privateKey, chainId, token) {
         name: name,
         decimals: Number(decimals)
       },
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     };
   } catch (error) {
     throw new Error(error.message);

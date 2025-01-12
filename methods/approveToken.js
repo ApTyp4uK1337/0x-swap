@@ -1,7 +1,7 @@
 import express from 'express';
 import Web3 from 'web3';
 import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getAbi, getQuote, getTimestamp, convertBigIntToString } from '../utils.js';
+import { getAbi, getQuote, convertBigIntToString } from '../utils.js';
 
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
@@ -23,15 +23,20 @@ async function approveToken(privateKey, chainId, sellToken, buyToken, sellAmount
 
     const quote = await getQuote(chainId, sellToken, buyToken, amount, account.address);
     const abi = await getAbi(chainId, sellToken);
+
     const contract = new web3.eth.Contract(abi, sellToken);
 
     if (quote.issues.allowance) {
+      const estimatedGas = await contract.methods
+        .approve(quote.issues.allowance.spender, maxUint256)
+        .estimateGas({ from: account.address });
+
       await contract.methods
         .approve(
           quote.issues.allowance.spender,
           '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
         )
-        .send({ from: account.address });
+        .send({ from: account.address, gas: estimatedGas });
     }
 
     const [name, symbol, decimals] = await Promise.all([
@@ -49,7 +54,7 @@ async function approveToken(privateKey, chainId, sellToken, buyToken, sellAmount
         symbol: symbol,
         decimals: decimals
       },
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     };
   } catch (error) {
     throw new Error(error.message);

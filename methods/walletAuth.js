@@ -1,7 +1,6 @@
 import express from 'express';
 import Web3 from 'web3';
 import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getTimestamp } from '../utils.js';
 
 const router = express.Router();
 
@@ -29,14 +28,14 @@ async function walletAuth(privateKey) {
         private_key: privateKey,
         wallet: account.address,
       },
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     };
   } catch (error) {
     return {
       status: false,
       error: 'Error processing wallet',
       details: error.message,
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     };
   } finally {
     if (account) {
@@ -53,7 +52,7 @@ router.post('/', async (req, res) => {
       return res.status(403).json({
         status: false,
         error: 'Forbidden: Invalid or missing API key',
-        timestamp: getTimestamp(),
+        timestamp: new Date(),
       });
     }
 
@@ -64,7 +63,7 @@ router.post('/', async (req, res) => {
         status: false,
         error: 'Missing required parameters',
         params: req.body,
-        timestamp: getTimestamp(),
+        timestamp: new Date(),
       });
     }
 
@@ -75,7 +74,7 @@ router.post('/', async (req, res) => {
       status: false,
       error: 'walletAuth failed',
       details: error.message,
-      timestamp: getTimestamp(),
+      timestamp: new Date(),
     });
   }
 });
