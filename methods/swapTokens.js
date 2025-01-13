@@ -24,25 +24,49 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
 
     const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage);
 
-    const sellTokenABI = await getAbi(chainId, sellToken);
-    const sellTokenContract = new web3.eth.Contract(sellTokenABI, sellToken);
-
     if (quote.issues.allowance !== null) {
+      const sellTokenABI = await getAbi(chainId, sellToken);
+      const sellTokenContract = new web3.eth.Contract(sellTokenABI, sellToken);
+
       await sellTokenContract.methods.approve(quote.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
     }
 
-    const signature = ethSigUtil.signTypedData({ privateKey: privateKey.slice(2), data: quote.permit2.eip712, version: 'V4' });
-    const signatureLength = web3.utils.hexToBytes(web3.utils.toHex(signature)).length;
-    let signatureLengthInHex = web3.utils.padLeft(web3.utils.toHex(signatureLength), 64, '0');
-    const txData = quote.transaction.data + signatureLengthInHex.slice(2) + signature.slice(2);
+    let txData = quote.transaction.data;
+
+    if (quote.permit2 && quote.permit2.eip712) {
+      const signature = ethSigUtil.signTypedData({
+        privateKey: privateKey.slice(2),
+        data: quote.permit2.eip712,
+        version: 'V4',
+      });
+
+      if (!signature) {
+        throw new Error("Не удалось подписать данные");
+      }
+
+      const signatureLength = web3.utils.hexToBytes(web3.utils.toHex(signature)).length;
+      let signatureLengthInHex = web3.utils.padLeft(web3.utils.toHex(signatureLength), 64, '0');
+      txData = quote.transaction.data + signatureLengthInHex.slice(2) + signature.slice(2);
+    }
+
+    let nonce = null;
+
+    if (sellToken === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+      nonce = await web3.eth.getTransactionCount(account.address, 'latest');
+      nonce = nonce.toString();
+    }
+
+    console.log(nonce);
 
     const tx = {
+      chainId: chainId,
       from: account.address,
       to: quote.transaction.to,
       data: txData,
-      value: '0',
+      value: quote.transaction.value.toString(),
       gas: quote.transaction.gas.toString(),
       gasPrice: quote.transaction.gasPrice.toString(),
+      nonce: nonce
     };
 
     const signedTx = await web3.eth.accounts.signTransaction(tx, privateKey);
@@ -52,10 +76,10 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       try {
         const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
 
-        const buyTokenABI = await getAbi(chainId, buyToken);
-        const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
-
         if (quote2.issues.allowance !== null) {
+          const buyTokenABI = await getAbi(chainId, buyToken);
+          const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
+
           await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
         }
       } catch (error) {
