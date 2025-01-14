@@ -24,9 +24,7 @@ async function getTokenBalance(privateKey, chainId, tokenAddress = null) {
     const response = {
       status: true,
       response: {
-        0: {
-          balance: ethBalance.toString()
-        },
+        0: ethBalance.toString()
       },
       timestamp: new Date(),
     };
@@ -36,9 +34,7 @@ async function getTokenBalance(privateKey, chainId, tokenAddress = null) {
       const contract = new web3.eth.Contract(abi, tokenAddress);
       const balance = await contract.methods.balanceOf(account.address).call();
 
-      response.response[tokenAddress] = {
-        balance: balance.toString()
-      };
+      response.response[tokenAddress] = balance.toString();
     }
 
     return response;

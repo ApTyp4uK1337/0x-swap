@@ -52,11 +52,8 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
     let nonce = null;
 
     if (sellToken === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
-      nonce = await web3.eth.getTransactionCount(account.address, 'latest');
-      nonce = nonce.toString();
+      nonce = await web3.eth.getTransactionCount(account.address);
     }
-
-    console.log(nonce);
 
     const tx = {
       chainId: chainId,
@@ -73,17 +70,13 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
     const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
 
     if (receipt.status) {
-      try {
-        const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
+      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
 
-        if (quote2.issues.allowance !== null) {
-          const buyTokenABI = await getAbi(chainId, buyToken);
-          const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
+      if (quote2.issues.allowance !== null) {
+        const buyTokenABI = await getAbi(chainId, buyToken);
+        const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
 
-          await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
-        }
-      } catch (error) {
-        console.error('Error during secondary quote retrieval or processing:', error.message);
+        await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
       }
 
       let buyAmount = 0
@@ -120,7 +113,6 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       };
     }
   } catch (error) {
-    console.error('Transaction failed:', error.message);
     return {
       status: false,
       response: {
