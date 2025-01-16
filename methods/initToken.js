@@ -6,19 +6,8 @@ import { getAbi } from '../utils.js';
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
 
-function addAccountToWallet(privateKey) {
-  const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-  web3.eth.accounts.wallet.add(account);
-
-  return account;
-}
-
-async function initToken(privateKey, chainId, token) {
-  let account;
-
+async function initToken(chainId, token) {
   try {
-    account = addAccountToWallet(privateKey);
-
     const abi = await getAbi(chainId, token);
     const contract = new web3.eth.Contract(abi, token);
 
@@ -41,10 +30,6 @@ async function initToken(privateKey, chainId, token) {
     };
   } catch (error) {
     throw new Error(error.message);
-  } finally {
-    if (account) {
-      web3.eth.accounts.wallet.remove(account.address);
-    }
   }
 }
 
@@ -57,16 +42,16 @@ router.post('/', async (req, res) => {
       .json({ status: false, error: 'Forbidden: Invalid or missing API key', timestamp: new Date() });
   }
 
-  const { private_key, chain_id = 42161, token } = req.body;
+  const { chain_id = 42161, token } = req.body;
 
-  if (!private_key || !chain_id || !token) {
+  if (!chain_id || !token) {
     return res
       .status(400)
       .json({ status: false, error: 'Missing required parameters', params: req.body, timestamp: new Date() });
   }
 
   try {
-    const response = await initToken(private_key, chain_id, token);
+    const response = await initToken(chain_id, token);
     return res.status(200).json(response);
   } catch (error) {
     return res

@@ -39,21 +39,8 @@ async function approveToken(privateKey, chainId, sellToken, buyToken, sellAmount
         .send({ from: account.address, gas: estimatedGas });
     }
 
-    const [name, symbol, decimals] = await Promise.all([
-      contract.methods.name().call(),
-      contract.methods.symbol().call(),
-      contract.methods.decimals().call(),
-    ]);
-
     return {
       status: true,
-      response: {
-        chain_id: Number(chainId),
-        address: sellToken,
-        name: name,
-        symbol: symbol,
-        decimals: decimals
-      },
       timestamp: new Date(),
     };
   } catch (error) {
