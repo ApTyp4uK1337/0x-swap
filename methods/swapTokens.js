@@ -63,13 +63,72 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       value: quote.transaction.value.toString(),
       gas: quote.transaction.gas.toString(),
       gasPrice: quote.transaction.gasPrice.toString(),
-      nonce: nonce
+      nonce: nonce,
     };
 
     const signedTx = await web3.eth.accounts.signTransaction(tx, privateKey);
-    const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
 
-    if (receipt.status) {
+    let receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction).catch((error) => {
+      if (error.message.includes('was not mined within')) {
+        console.warn('Transaction mining is taking longer than expected. Continuing execution...');
+        return null;
+      } else {
+        throw error;
+      }
+    });
+
+    if (!receipt) {
+      for (let i = 0; i < 10; i++) {
+        console.log(`Checking transaction receipt... (${i + 1}/10)`);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        const pendingReceipt = await web3.eth.getTransactionReceipt(signedTx.transactionHash);
+        if (pendingReceipt) {
+          receipt = pendingReceipt;
+          break;
+        }
+      }
+    }
+
+    if (!receipt) {
+      console.warn('Transaction not mined after multiple attempts.');
+
+      return {
+        status: true,
+        response: {
+          tx_hash: signedTx.transactionHash,
+          sell_token: sellToken,
+          buy_token: buyToken,
+          sell_amount: amount.toString(),
+          buy_amount: '0',
+          gas_used: '0',
+          note: 'Transaction not mined even after retries, please verify on chain.',
+        },
+        timestamp: new Date(),
+      };
+    }
+
+    let buyAmount = 0;
+
+    const transferEventSignature = web3.utils.sha3('Transfer(address,address,uint256)');
+    const transferEvents = receipt.logs.filter(log => log.topics[0] === transferEventSignature);
+
+    if (transferEvents.length > 0) {
+      const lastTransferEvent = transferEvents.pop();
+      const decodedEvent = web3.eth.abi.decodeLog(
+        [
+          { type: 'address', name: 'from', indexed: true },
+          { type: 'address', name: 'to', indexed: true },
+          { type: 'uint256', name: 'value' },
+        ],
+        lastTransferEvent.data,
+        lastTransferEvent.topics.slice(1)
+      );
+
+      buyAmount = decodedEvent.value.toString();
+    }
+
+    try {
       const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
 
       if (quote2.issues.allowance !== null) {
@@ -78,47 +137,29 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
 
         await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
       }
-
-      let buyAmount = 0
-
-      const transferEventSignature = web3.utils.sha3('Transfer(address,address,uint256)');
-      const transferEvents = receipt.logs.filter(log => log.topics[0] === transferEventSignature);
-
-      if (transferEvents.length > 0) {
-        const lastTransferEvent = transferEvents.pop();
-        const decodedEvent = web3.eth.abi.decodeLog(
-          [
-            { type: 'address', name: 'from', indexed: true },
-            { type: 'address', name: 'to', indexed: true },
-            { type: 'uint256', name: 'value' },
-          ],
-          lastTransferEvent.data,
-          lastTransferEvent.topics.slice(1)
-        );
-
-        buyAmount = decodedEvent.value.toString();
-      }
-
-      return {
-        status: receipt.status,
-        response: {
-          tx_hash: receipt.transactionHash,
-          sell_token: sellToken,
-          buy_token: buyToken,
-          sell_amount: amount.toString(),
-          buy_amount: buyAmount.toString() ?? '0',
-          gas_used: receipt.gasUsed.toString(),
-        },
-        timestamp: new Date()
-      };
+    } catch (error) {
+      console.warn('Ignoring error from quote2:', error.message);
     }
+
+    return {
+      status: true,
+      response: {
+        tx_hash: receipt.transactionHash,
+        sell_token: sellToken,
+        buy_token: buyToken,
+        sell_amount: amount.toString(),
+        buy_amount: buyAmount.toString() ?? '0',
+        gas_used: receipt.gasUsed.toString(),
+      },
+      timestamp: new Date(),
+    };
   } catch (error) {
     return {
       status: false,
       response: {
         error: error.message,
       },
-      timestamp: new Date()
+      timestamp: new Date(),
     };
   } finally {
     if (account) {

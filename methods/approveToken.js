@@ -20,6 +20,7 @@ async function approveToken(privateKey, chainId, sellToken, buyToken, sellAmount
     account = addAccountToWallet(privateKey);
 
     const amount = web3.utils.toWei(sellAmount, 'ether').toString();
+    const maxUint256 = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
     const quote = await getQuote(chainId, sellToken, buyToken, amount, account.address);
     const abi = await getAbi(chainId, sellToken);
@@ -34,7 +35,7 @@ async function approveToken(privateKey, chainId, sellToken, buyToken, sellAmount
       await contract.methods
         .approve(
           quote.issues.allowance.spender,
-          '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+          maxUint256
         )
         .send({ from: account.address, gas: estimatedGas });
     }
