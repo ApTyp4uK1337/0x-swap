@@ -14,7 +14,7 @@ function addAccountToWallet(privateKey) {
   return account;
 }
 
-async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage) {
+async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage = 100, sellAll = false) {
   let account;
 
   try {
@@ -22,7 +22,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
 
     const amountIn = web3.utils.toWei(amount.toString(), 'ether').toString();
 
-    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage);
+    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage, sellAll);
 
     if (quote.issues.allowance !== null) {
       const sellTokenABI = await getAbi(chainId, sellToken);
@@ -129,7 +129,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
     }
 
     try {
-      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
+      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage, false);
 
       if (quote2.issues.allowance !== null) {
         const buyTokenABI = await getAbi(chainId, buyToken);
@@ -180,9 +180,9 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100 } = req.body;
+    const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100, sell_all = false } = req.body;
 
-    if (!private_key) {
+    if (!private_key || !chain_id || !sell_token || !buy_token || !amount) {
       return res.status(400).json({
         status: false,
         error: 'Missing required parameters',
@@ -191,7 +191,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const response = await swapTokens(private_key, chain_id, sell_token, buy_token, amount, slippage);
+    const response = await swapTokens(private_key, chain_id, sell_token, buy_token, amount, slippage, sell_all);
     return res.status(200).json(convertBigIntToString(response));
   } catch (error) {
     return res.status(500).json({
