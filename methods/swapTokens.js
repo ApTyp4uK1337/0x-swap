@@ -16,6 +16,7 @@ function addAccountToWallet(privateKey) {
 
 async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage = 100, sellAll = false) {
   let account;
+  let approve = false;
 
   try {
     account = addAccountToWallet(privateKey);
@@ -102,6 +103,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
           sell_amount: amount.toString(),
           buy_amount: '0',
           gas_used: '0',
+          approve: approve,
           note: 'Transaction not mined even after retries, please verify on chain.',
         },
         timestamp: new Date(),
@@ -136,6 +138,10 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
         const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
 
         await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
+
+        approve = true;
+      } else {
+        approve = true;
       }
     } catch (error) {
       console.warn('Ignoring error from quote2:', error.message);
@@ -150,6 +156,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
         sell_amount: amount.toString(),
         buy_amount: buyAmount.toString() ?? '0',
         gas_used: receipt.gasUsed.toString(),
+        approve: approve
       },
       timestamp: new Date(),
     };
