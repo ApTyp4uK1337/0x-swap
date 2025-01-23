@@ -43,7 +43,7 @@ export async function getAbi(chainId, tokenAddress) {
   }
 }
 
-export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, slippageBps = 100, sellEntireBalance = false) {
+export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, slippageBps = 100) {
   try {
     const { data } = await axios.get('https://api.0x.org/swap/permit2/quote', {
       params: {
@@ -52,8 +52,7 @@ export async function getQuote(chainId, sellToken, buyToken, sellAmount, taker, 
         buyToken,
         sellAmount,
         taker,
-        slippageBps,
-        sellEntireBalance
+        slippageBps
       },
       headers: {
         '0x-api-key': ZEROX_API_KEY,

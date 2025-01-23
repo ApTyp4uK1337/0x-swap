@@ -14,7 +14,7 @@ function addAccountToWallet(privateKey) {
   return account;
 }
 
-async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage = 100, sellAll = false) {
+async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slippage = 100, nonce = null) {
   let account;
   let approve = false;
 
@@ -23,7 +23,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
 
     const amountIn = web3.utils.toWei(amount.toString(), 'ether').toString();
 
-    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage, sellAll);
+    const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage);
 
     if (quote.issues.allowance !== null) {
       const sellTokenABI = await getAbi(chainId, sellToken);
@@ -50,10 +50,8 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       txData = quote.transaction.data + signatureLengthInHex.slice(2) + signature.slice(2);
     }
 
-    let nonce = null;
-
-    if (sellToken === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
-      nonce = await web3.eth.getTransactionCount(account.address);
+    if (nonce === null) {
+      nonce = await web3.eth.getTransactionCount(account.address, 'pending');
     }
 
     const tx = {
@@ -63,8 +61,8 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       data: txData,
       value: quote.transaction.value.toString(),
       gas: quote.transaction.gas.toString(),
-      gasPrice: quote.transaction.gasPrice.toString(),
-      nonce: nonce,
+      gasPrice: (Math.ceil(Number(quote.transaction.gasPrice) * 1.2)).toString(),
+      nonce: nonce.toString(),
     };
 
     const signedTx = await web3.eth.accounts.signTransaction(tx, privateKey);
@@ -131,7 +129,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
     }
 
     try {
-      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage, false);
+      const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
 
       if (quote2.issues.allowance !== null) {
         const buyTokenABI = await getAbi(chainId, buyToken);
@@ -187,7 +185,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100, sell_all = false } = req.body;
+    const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100, nonce = null } = req.body;
 
     if (!private_key || !chain_id || !sell_token || !buy_token || !amount) {
       return res.status(400).json({
@@ -198,7 +196,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const response = await swapTokens(private_key, chain_id, sell_token, buy_token, amount, slippage, sell_all);
+    const response = await swapTokens(private_key, chain_id, sell_token, buy_token, amount, slippage, nonce);
     return res.status(200).json(convertBigIntToString(response));
   } catch (error) {
     return res.status(500).json({
