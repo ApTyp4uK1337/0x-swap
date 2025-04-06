@@ -1,45 +1,12 @@
 import fs from 'fs';
 import axios from 'axios';
-import { ETHERSCAN_API_KEY, ZEROX_API_KEY } from './config.js';
+import { ZEROX_API_KEY } from './config.js';
 
-export async function getAbi(chainId, tokenAddress) {
+export async function getAbi() {
   if (fs.existsSync(`./abi/erc20abi.json`)) {
     const abi = JSON.parse(fs.readFileSync(`./abi/erc20abi.json`, 'utf8'));
 
     return abi;
-  }
-
-  if (fs.existsSync(`./abi/${tokenAddress}.json`)) {
-    const abi = JSON.parse(fs.readFileSync(`./abi/${tokenAddress}.json`, 'utf8'));
-
-    return abi;
-  }
-
-  try {
-    const response = await axios.get('https://api.etherscan.io/v2/api', {
-      params: {
-        chainid: chainId,
-        module: 'contract',
-        action: 'getabi',
-        address: tokenAddress,
-        apikey: ETHERSCAN_API_KEY
-      }
-    });
-
-    if (response.data && response.data.status === '1') {
-      const abi = JSON.parse(response.data.result);
-
-      fs.mkdirSync('./abi', { recursive: true });
-      fs.writeFileSync(`./abi/${tokenAddress}.json`, JSON.stringify(abi, null, 2), 'utf8');
-
-      return abi;
-    } else {
-      throw new Error(`Ошибка API: ${response.data.message || 'Неизвестная ошибка'}`);
-    }
-  } catch (error) {
-    console.error(`Не удалось загрузить ABI: ${error.message}`);
-
-    throw error;
   }
 }
 

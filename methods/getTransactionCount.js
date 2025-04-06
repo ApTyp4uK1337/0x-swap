@@ -1,8 +1,8 @@
 import express from 'express';
 import Web3 from 'web3';
 import ethSigUtil from "@metamask/eth-sig-util";
-import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
-import { getAbi, getQuote, convertBigIntToString } from '../utils.js';
+import { HTTP_RPC_PROVIDER } from '../config.js';
+import { convertBigIntToString } from '../utils.js';
 
 const router = express.Router();
 const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
@@ -46,16 +46,6 @@ async function getTransactionCount(privateKey) {
 
 router.post('/', async (req, res) => {
   try {
-    const apiKey = req.headers['developer-api-key'];
-
-    if (apiKey !== DEVELOPER_API_KEY) {
-      return res.status(403).json({
-        status: false,
-        error: 'Forbidden: Invalid or missing API key',
-        timestamp: new Date(),
-      });
-    }
-
     const { private_key } = req.body;
 
     if (!private_key) {

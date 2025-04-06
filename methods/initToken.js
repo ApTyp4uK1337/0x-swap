@@ -1,6 +1,6 @@
 import express from 'express';
 import Web3 from 'web3';
-import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
+import { HTTP_RPC_PROVIDER } from '../config.js';
 import { getAbi } from '../utils.js';
 
 const router = express.Router();
@@ -8,7 +8,7 @@ const web3 = new Web3(new Web3.providers.HttpProvider(HTTP_RPC_PROVIDER))
 
 async function initToken(chainId, token) {
   try {
-    const abi = await getAbi(chainId, token);
+    const abi = await getAbi();
     const contract = new web3.eth.Contract(abi, token);
 
     const [name, symbol, decimals] = await Promise.all([
@@ -34,14 +34,6 @@ async function initToken(chainId, token) {
 }
 
 router.post('/', async (req, res) => {
-  const apiKey = req.headers['developer-api-key'];
-
-  if (apiKey !== DEVELOPER_API_KEY) {
-    return res
-      .status(403)
-      .json({ status: false, error: 'Forbidden: Invalid or missing API key', timestamp: new Date() });
-  }
-
   const { chain_id = 42161, token } = req.body;
 
   if (!chain_id || !token) {

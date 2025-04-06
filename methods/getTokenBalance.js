@@ -1,6 +1,6 @@
 import express from 'express';
 import Web3 from 'web3';
-import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
+import { HTTP_RPC_PROVIDER } from '../config.js';
 import { getAbi, convertBigIntToString } from '../utils.js';
 
 const router = express.Router();
@@ -30,7 +30,7 @@ async function getTokenBalance(privateKey, chainId, tokenAddress = null) {
     };
 
     if (tokenAddress) {
-      const abi = await getAbi(chainId, tokenAddress);
+      const abi = await getAbi();
       const contract = new web3.eth.Contract(abi, tokenAddress);
       const balance = await contract.methods.balanceOf(account.address).call();
 
@@ -49,15 +49,6 @@ async function getTokenBalance(privateKey, chainId, tokenAddress = null) {
 
 router.post('/', async (req, res) => {
   try {
-    const apiKey = req.headers['developer-api-key'];
-    if (apiKey !== DEVELOPER_API_KEY) {
-      return res.status(403).json({
-        status: false,
-        error: 'Forbidden: Invalid or missing API key',
-        timestamp: new Date(),
-      });
-    }
-
     const { private_key, chain_id = 42161, address = null } = req.body;
 
     if (!private_key || !chain_id) {

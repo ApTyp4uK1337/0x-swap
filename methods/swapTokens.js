@@ -1,7 +1,7 @@
 import express from 'express';
 import Web3 from 'web3';
 import ethSigUtil from "@metamask/eth-sig-util";
-import { DEVELOPER_API_KEY, HTTP_RPC_PROVIDER } from '../config.js';
+import { HTTP_RPC_PROVIDER } from '../config.js';
 import { getAbi, getQuote, convertBigIntToString } from '../utils.js';
 
 const router = express.Router();
@@ -26,7 +26,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
     const quote = await getQuote(chainId, sellToken, buyToken, amountIn, account.address, slippage);
 
     if (quote.issues.allowance !== null) {
-      const sellTokenABI = await getAbi(chainId, sellToken);
+      const sellTokenABI = await getAbi();
       const sellTokenContract = new web3.eth.Contract(sellTokenABI, sellToken);
 
       await sellTokenContract.methods.approve(quote.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
@@ -132,7 +132,7 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
       const quote2 = await getQuote(chainId, buyToken, sellToken, quote.minBuyAmount, account.address, slippage);
 
       if (quote2.issues.allowance !== null) {
-        const buyTokenABI = await getAbi(chainId, buyToken);
+        const buyTokenABI = await getAbi();
         const buyTokenContract = new web3.eth.Contract(buyTokenABI, buyToken);
 
         await buyTokenContract.methods.approve(quote2.issues.allowance.spender, '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff').send({ from: account.address });
@@ -175,16 +175,6 @@ async function swapTokens(privateKey, chainId, sellToken, buyToken, amount, slip
 
 router.post('/', async (req, res) => {
   try {
-    const apiKey = req.headers['developer-api-key'];
-
-    if (apiKey !== DEVELOPER_API_KEY) {
-      return res.status(403).json({
-        status: false,
-        error: 'Forbidden: Invalid or missing API key',
-        timestamp: new Date(),
-      });
-    }
-
     const { private_key, chain_id = 42161, sell_token, buy_token, amount, slippage = 100, nonce = null } = req.body;
 
     if (!private_key || !chain_id || !sell_token || !buy_token || !amount) {
